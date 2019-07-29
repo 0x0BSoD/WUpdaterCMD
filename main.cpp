@@ -21,6 +21,9 @@ int main(int argc, _TCHAR* argv[])
 	IDownloadResult* IDResult;
 	IUpdateDownloadResult* IUDResult;
 	IUpdateDownloader *iDownloader;
+	IUpdateCollection* ToDownloadList;
+
+	hr = CoCreateInstance(CLSID_UpdateCollection, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateCollection, (LPVOID*)& ToDownloadList);
 
 	// ==========================================================================
 	// SEARCH SECTION
@@ -65,10 +68,8 @@ int main(int argc, _TCHAR* argv[])
 		return 0;
 	}
 	SysFreeString(criteria);
-
 	sr.results->get_Updates(&upd.List);
 	upd.List->get_Count(&upd.Size);
-
 	// Print updates info
 	PrintUInfo(upd);
 
@@ -89,39 +90,84 @@ int main(int argc, _TCHAR* argv[])
 		return 0;
 	}
 
-	// Updates to download
-	iDownloader->put_Updates(upd.List);
-
-	
-	wcout << L"Downloading updates ..." << endl;
-	hr = iDownloader->Download(&IDResult);
-
-	switch (hr)
+	// Check cache
+	// get_IsDownloaded
+	for (LONG i = 0; i < upd.Size; i++)
 	{
-	case S_OK:
-		wcout << L"List of downloaded items on the machine:" << endl;
-		for (LONG i = 0; i < upd.Size; i++)
+		long newIndex;
+		upd.List->get_Item(i, &upd.Item);
+		upd.Item->get_Title(&upd.Name);
+		hr = upd.Item->get_IsDownloaded(&upd.InCache);
+		switch (hr)
 		{
-			upd.List->get_Item(i, &upd.Item);
-			upd.Item->get_Title(&upd.Name);
-			IDResult->GetUpdateResult(i, &IUDResult);
-			hr = IUDResult->get_ResultCode(&upd.RC);
+		case S_OK:
+			if (upd.InCache) {
+				wcout << i + 1 << " - " << upd.Name << " Already downloaded" << endl;
 
-			wcout << i + 1 << " - " << upd.Name << "  RESULT: " << upd.RC << endl;
+			}
+			else {
+				hr = ToDownloadList->Add(upd.Item, &newIndex);
+				switch (hr)
+				{
+				case E_POINTER:
+					wcout << L" A parameter value is invalid or NULL" << endl;
+					return 0;
+				case WU_E_NOT_SUPPORTED:
+					wcout << L"The collection is read-only" << endl;
+					return 0;
+				}
+			}
+			break;
+		default:
+			wcout << "Som error" << endl;
+			return 0;
 		}
-		break;
-	case WU_E_PER_MACHINE_UPDATE_ACCESS_DENIED:
-		wcout << L"Only administrators can perform this operation on per-computer updates" << endl;
-		return 0;
-	case WU_E_INVALID_OPERATION:
-		wcout << L"The computer cannot access the update site" << endl;
-		return 0;
-	case WU_E_NO_UPDATE:
-		wcout << L"Windows Update Agent (WUA) does not have updates in the collection" << endl;
-		return 0;
-	case WU_E_NOT_INITIALIZED:
-		wcout << L"Windows Update Agent is not initialized" << endl;
-		return 0;
+	}
+
+	// Updates to download
+	long tdLen;
+	ToDownloadList->get_Count(&tdLen);
+	wcout << tdLen << endl;
+	if (tdLen > 0) {
+		iDownloader->put_Updates(ToDownloadList);
+
+		wcout << L"Downloading updates ..." << endl;
+		hr = iDownloader->Download(&IDResult);
+
+		switch (hr)
+		{
+		case S_OK:
+			wcout << L"List of downloaded items on the machine:" << endl;
+			for (LONG i = 0; i < tdLen; i++)
+			{
+				ToDownloadList->get_Item(i, &upd.Item);
+				upd.Item->get_Title(&upd.Name);
+				IDResult->GetUpdateResult(i, &IUDResult);
+				hr = IUDResult->get_ResultCode(&upd.RC);
+				switch (upd.RC)
+				{
+				case 2:
+					wcout << i + 1 << " - " << upd.Name << " Successfully downloaded" << endl;
+					break;
+				default:
+					wcout << i + 1 << " - " << upd.Name << " RESULT: " << upd.RC << endl;
+					break;
+				}
+			}
+			break;
+		case WU_E_PER_MACHINE_UPDATE_ACCESS_DENIED:
+			wcout << L"Only administrators can perform this operation on per-computer updates" << endl;
+			return 0;
+		case WU_E_INVALID_OPERATION:
+			wcout << L"The computer cannot access the update site" << endl;
+			return 0;
+		case WU_E_NO_UPDATE:
+			wcout << L"Windows Update Agent (WUA) does not have updates in the collection" << endl;
+			return 0;
+		case WU_E_NOT_INITIALIZED:
+			wcout << L"Windows Update Agent is not initialized" << endl;
+			return 0;
+		}
 	}
 
 	::CoUninitialize();
