@@ -21,14 +21,5 @@ struct Updates {
 	OperationResultCode RC;
 };
 
-/* Progress
-struct Progress {
-	LONG updateIndex;
-	LONG totalPercent;
-	LONG Percent;
-	IUpdateDownloadResult* result;
-};
-*/
-
 // Functions and methods
 void PrintUInfo(Updates iu);
