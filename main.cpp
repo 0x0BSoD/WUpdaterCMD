@@ -17,10 +17,6 @@ int main(int argc, _TCHAR* argv[])
 	string str_param;
 	hr = CoInitialize(NULL);
 	
-	// Progress
-	//IDownloadProgress* iDProgress;
-	//IInstallationProgress* iIProgress;
-
 	// Download
 	IDownloadResult* IDResult;
 	IUpdateDownloadResult* IUDResult;
@@ -99,7 +95,7 @@ int main(int argc, _TCHAR* argv[])
 	
 	wcout << L"Downloading updates ..." << endl;
 	hr = iDownloader->Download(&IDResult);
-	wcout << hr << endl;
+
 	switch (hr)
 	{
 	case S_OK:
@@ -114,6 +110,9 @@ int main(int argc, _TCHAR* argv[])
 			wcout << i + 1 << " - " << upd.Name << "  RESULT: " << upd.RC << endl;
 		}
 		break;
+	case WU_E_PER_MACHINE_UPDATE_ACCESS_DENIED:
+		wcout << L"Only administrators can perform this operation on per-computer updates" << endl;
+		return 0;
 	case WU_E_INVALID_OPERATION:
 		wcout << L"The computer cannot access the update site" << endl;
 		return 0;
@@ -124,27 +123,6 @@ int main(int argc, _TCHAR* argv[])
 		wcout << L"Windows Update Agent is not initialized" << endl;
 		return 0;
 	}
-
-	/*
-	iDownload->get_Updates(&upd.updateList);
-	iDownload->GetProgress(&iDProgress);
-	long int done = (long int)100;
-	for (LONG i = 0; i < upd.updateSize; i++) {
-		bool dFlag = true;
-		wcout << "[!] Downloading - " << upd.updateName << endl;
-		
-		while (dFlag) {
-			iDProgress->get_PercentComplete(&progress.totalPercent);
-			wcout << "% - " << progress.totalPercent << endl;
-		}
-		
-		// iDProgress->get_CurrentUpdatePercentComplete(&progress.Percent);
-		if (&progress.Percent >= &done) {
-			iDProgress->GetUpdateResult(i, &progress.result);
-			dFlag = false;
-		}
-	}
-	*/
 
 	::CoUninitialize();
 
