@@ -6,20 +6,22 @@
 
 // Search
 struct Search {
-	IUpdateSession* iUpdate;
+	IUpdateSession*  iUpdate;
 	IUpdateSearcher* searcher;
-	ISearchResult* results;
+	ISearchResult*   results;
 };
 
 // Updates
 struct Updates {
-	IUpdateCollection* List;
-	IUpdate* Item;
-	LONG              Size;
-	BSTR              Name;
-	DATE              retdate;
+	IUpdateCollection* UpdatesList;
+	IUpdate*            Item;
+	VARIANT_BOOL        InCache;
+	LONG                Size;
+	BSTR                Name;
+	DATE                retdate;
 	OperationResultCode RC;
 };
 
 // Functions and methods
-void PrintUInfo(Updates iu);
+void PrintUInfo(Updates upd, IUpdateCollection* ToDownloadList);
+BSTR getCriteria();
