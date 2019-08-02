@@ -26,3 +26,4 @@ struct Updates {
 void printUInfo(Updates upd, IUpdateCollection* ToDownloadList);
 void syncDownloadUpdates(Updates upd, IUpdateCollection* ToDownloadList, IUpdateDownloader* iDownloader);
 BSTR getCriteria();
+int checkHR(HRESULT hr);
