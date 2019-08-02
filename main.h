@@ -23,5 +23,6 @@ struct Updates {
 };
 
 // Functions and methods
-void PrintUInfo(Updates upd, IUpdateCollection* ToDownloadList);
+void printUInfo(Updates upd, IUpdateCollection* ToDownloadList);
+void syncDownloadUpdates(Updates upd, IUpdateCollection* ToDownloadList, IUpdateDownloader* iDownloader);
 BSTR getCriteria();
