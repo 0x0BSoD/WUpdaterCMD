@@ -49,6 +49,7 @@ int main(int argc, _TCHAR* argv[])
 		}
 		// Updates to download
 		syncDownloadUpdates(updates, ToDownloadList, iDownloader);
+		installUpdates(updates, ToDownloadList);
 	}
 	else 
 	{
@@ -181,6 +182,53 @@ void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUp
 		{
 			return;
 		}
+	}
+}
+
+// ==========================================================================
+// INSTALL SECTION
+// ==========================================================================
+void installUpdates(Updates updates, IUpdateCollection* list) {
+	HRESULT hr = CoInitialize(NULL);
+	IUpdateInstaller* iUInstaller;
+	IInstallationResult* iIResult;
+	IUpdateInstallationResult* iUIResult;
+	long lenght;
+
+	hr = CoCreateInstance(CLSID_UpdateInstaller, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateInstaller, (LPVOID*)& iUInstaller);
+	if (checkHR(hr) != 0)
+	{
+		return;
+	}
+	iUInstaller->put_Updates(list);
+
+	wcout << "Installation ..." << endl;
+	hr = iUInstaller->Install(&iIResult);
+
+	list->get_Count(&lenght);
+	if (checkHR(hr) == 0)
+	{
+		wcout << L"List of downloaded items on the machine:" << endl;
+		for (LONG i = 0; i < lenght; i++)
+		{
+			list->get_Item(i, &updates.Item);
+			updates.Item->get_Title(&updates.Name);
+			iIResult->GetUpdateResult(i, &iUIResult);
+			hr = iUIResult->get_ResultCode(&updates.RC);
+			switch (updates.RC)
+			{
+			case 2:
+				wcout << i + 1 << " - " << updates.Name << " Successfully installed" << endl;
+				break;
+			default:
+				wcout << i + 1 << " - " << updates.Name << " RESULT: " << updates.RC << endl;
+				break;
+			}
+		}
+	}
+	else 
+	{
+		return;
 	}
 }
 
