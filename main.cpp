@@ -20,9 +20,6 @@ int main(int argc, _TCHAR* argv[])
 	IUpdateDownloader* iDownloader;
 	IUpdateCollection* ToDownloadList;
 
-	// CLS
-	// cout << string(50, '\n');
-
 	hr = CoCreateInstance(CLSID_UpdateCollection, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateCollection, (LPVOID*)& ToDownloadList);
 	// ==========================================================================
 	// SEARCH SECTION
@@ -30,49 +27,34 @@ int main(int argc, _TCHAR* argv[])
 	criteria = getCriteria();
 	hr = CoCreateInstance(CLSID_UpdateSession, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateSession, (LPVOID*)& sr.iUpdate);
 	hr = sr.iUpdate->CreateUpdateSearcher(&sr.searcher);
-	
 	wcout << endl;
 	wcout << L"Searching for updates ..." << endl;
 	hr = sr.searcher->Search(criteria, &sr.results);
-	switch (hr)
+	if (checkHR(hr) == 0) 
 	{
-	case S_OK:
 		wcout << L"List of applicable items on the machine:" << endl;
-		break;
-	case WU_E_LEGACYSERVER:
-		wcout << L"[!] No server selection enabled" << endl;
-		return 0;
-	case WU_E_INVALID_CRITERIA:
-		wcout << L"[!] Invalid search criteria" << endl;
-		return 0;
+		SysFreeString(criteria);
+		sr.results->get_Updates(&updates.UpdatesList);
+		updates.UpdatesList->get_Count(&updates.Size);
+
+		// Print updates info
+		printUInfo(updates, ToDownloadList);
+
+		// ==========================================================================
+		// DOWNLOAD SECTION
+		// ==========================================================================
+		hr = sr.iUpdate->CreateUpdateDownloader(&iDownloader);
+		if (checkHR(hr) != 0) {
+			return -1;
+		}
+		// Updates to download
+		syncDownloadUpdates(updates, ToDownloadList, iDownloader);
 	}
-	SysFreeString(criteria);
-
-	sr.results->get_Updates(&updates.UpdatesList);
-	updates.UpdatesList->get_Count(&updates.Size);
-
-	// Print updates info
-	printUInfo(updates, ToDownloadList);
-
-	// ==========================================================================
-	// DOWNLOAD SECTION
-	// ==========================================================================
-	hr = sr.iUpdate->CreateUpdateDownloader(&iDownloader);
-	switch(hr)
+	else 
 	{
-	case E_INVALIDARG:
-		wcout << L"[!] A parameter value is invalid" << endl;
-		return 0;
-	case E_ACCESSDENIED:
-		wcout << L"[!] This method cannot be called from a remote computer" << endl;
-		return 0;
+		return -1;
 	}
-
-	// Updates to download
-	syncDownloadUpdates(updates, ToDownloadList, iDownloader);
-
 	::CoUninitialize();
-
 	return 0;
 }
 
@@ -163,11 +145,6 @@ void printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 // ==========================================================================
 // DOWNLOAD SECTION
 // ==========================================================================
-
-void downloadProgress() {
-
-}
-
 void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUpdateDownloader* iDownloader) {
 	long tdLen;
 	IUpdateDownloadResult* IUDResult;
@@ -181,10 +158,7 @@ void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUp
 		wcout << endl;
 		wcout << L"Downloading updates ..." << endl;
 		hr = iDownloader->Download(&IDResult);
-
-		switch (hr)
-		{
-		case S_OK:
+		if (checkHR(hr) == 0) {
 			wcout << L"List of downloaded items on the machine:" << endl;
 			for (LONG i = 0; i < tdLen; i++)
 			{
@@ -202,19 +176,226 @@ void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUp
 					break;
 				}
 			}
-			break;
-		case WU_E_PER_MACHINE_UPDATE_ACCESS_DENIED:
-			wcout << L"[!] Only administrators can perform this operation on per-computer updates" << endl;
-			return;
-		case WU_E_INVALID_OPERATION:
-			wcout << L"[!] The computer cannot access the update site" << endl;
-			return;
-		case WU_E_NO_UPDATE:
-			wcout << L"[!] Windows Update Agent (WUA) does not have updates in the collection" << endl;
-			return;
-		case WU_E_NOT_INITIALIZED:
-			wcout << L"[!] Windows Update Agent is not initialized" << endl;
+		}
+		else 
+		{
 			return;
 		}
 	}
+}
+
+// ==========================================================================
+// ERROR CODES
+// ==========================================================================
+
+int checkHR(HRESULT hr) {
+
+	switch (hr)
+	{
+	case S_OK:
+		return 0;
+	case WU_E_NO_SERVICE:
+		wcout << L"[!] WUA was unable to provide the service" << endl;
+		return -1;
+	case WU_E_MAX_CAPACITY_REACHED:
+		wcout << L"[!] The maximum capacity of the service was exceeded" << endl;
+		return -1;
+	case WU_E_UNKNOWN_ID:
+		wcout << L"[!] WUA cannot find an ID" << endl;
+		return -1;
+	case WU_E_NOT_INITIALIZED:
+		wcout << L"[!] The object could not be initialized" << endl;
+		return -1;
+	case WU_E_RANGEOVERLAP:
+		wcout << L"[!] The update handler requested a byte range overlapping a previously requested range" << endl;
+		return -1;
+	case WU_E_TOOMANYRANGES:
+		wcout << L"[!] The requested number of byte ranges exceeds the maximum number (2³¹ - 1)" << endl;
+		return -1;
+	case WU_E_INVALIDINDEX:
+		wcout << L"[!] The index to a collection was invalid" << endl;
+		return -1;
+	case WU_E_ITEMNOTFOUND:
+		wcout << L"[!] The key for the item queried could not be found" << endl;
+		return -1;
+	case WU_E_OPERATIONINPROGRESS:
+		wcout << L"[!] Another conflicting operation was in progress. Some operations such as installation cannot be performed twice simultaneously" << endl;
+		return -1;
+	case WU_E_COULDNOTCANCEL:
+		wcout << L"[!] Cancellation of the operation was not allowed" << endl;
+		return -1;
+	case WU_E_CALL_CANCELLED:
+		wcout << L"[!] Operation was cancelled" << endl;
+		return -1;
+	case WU_E_NOOP:
+		wcout << L"[!] No operation was required" << endl;
+		return -1;
+	case WU_E_XML_MISSINGDATA:
+		wcout << L"[!] WUA could not find required information in the update's XML data" << endl;
+		return -1;
+	case WU_E_XML_INVALID:
+		wcout << L"[!] WUA found invalid information in the update's XML data" << endl;
+		return -1;
+	case WU_E_CYCLE_DETECTED:
+		wcout << L"[!] Circular update relationships were detected in the metadata" << endl;
+		return -1;
+	case WU_E_TOO_DEEP_RELATION:
+		wcout << L"[!] Update relationships too deep to evaluate were evaluated" << endl;
+		return -1;
+	case WU_E_INVALID_RELATIONSHIP:
+		wcout << L"[!] An invalid update relationship was detected" << endl;
+		return -1;
+	case WU_E_REG_VALUE_INVALID:
+		wcout << L"[!] An invalid registry value was read" << endl;
+		return -1;
+	case WU_E_DUPLICATE_ITEM:
+		wcout << L"[!] Operation tried to add a duplicate item to a list" << endl;
+		return -1;
+	case WU_E_INVALID_INSTALL_REQUESTED:
+		wcout << L"[!] Updates that are requested for install are not installable by the caller" << endl;
+		return -1;
+	case WU_E_INSTALL_NOT_ALLOWED:
+		wcout << L"[!] Operation tried to install while another installation was in progress or the system was pending a mandatory restart" << endl;
+		return -1;
+	case WU_E_NOT_APPLICABLE:
+		wcout << L"[!] Operation was not performed because there are no applicable updates" << endl;
+		return -1;
+	case WU_E_NO_USERTOKEN:
+		wcout << L"[!] Operation failed because a required user token is missing" << endl;
+		return -1;
+	case WU_E_EXCLUSIVE_INSTALL_CONFLICT:
+		wcout << L"[!] An exclusive update can't be installed with other updates at the same time" << endl;
+		return -1;
+	case WU_E_POLICY_NOT_SET:
+		wcout << L"[!] A policy value was not set" << endl;
+		return -1;
+	case WU_E_SELFUPDATE_IN_PROGRESS:
+		wcout << L"[!] The operation could not be performed because the Windows Update Agent is self-updating" << endl;
+		return -1;
+	case WU_E_INVALID_UPDATE:
+		wcout << L"[!] An update contains invalid metadata" << endl;
+		return -1;
+	case WU_E_SERVICE_STOP:
+		wcout << L"[!] Operation did not complete because the service or system was being shut down" << endl;
+		return -1;
+	case WU_E_NO_CONNECTION:
+		wcout << L"[!] Operation did not complete because the network connection was unavailable" << endl;
+		return -1;
+	case WU_E_NO_INTERACTIVE_USER:
+		wcout << L"[!] Operation did not complete because there is no logged-on interactive user" << endl;
+		return -1;
+	case WU_E_TIME_OUT:
+		wcout << L"[!] Operation did not complete because it timed out" << endl;
+		return -1;
+	case WU_E_ALL_UPDATES_FAILED:
+		wcout << L"[!] Operation failed for all the updates" << endl;
+		return -1;
+	case WU_E_EULAS_DECLINED:
+		wcout << L"[!] The license terms for all updates were declined" << endl;
+		return -1;
+	case WU_E_NO_UPDATE:
+		wcout << L"[!] There are no updates" << endl;
+		return -1;
+	case WU_E_USER_ACCESS_DISABLED:
+		wcout << L"[!] Group Policy settings prevented access to Windows Update" << endl;
+		return -1;
+	case WU_E_INVALID_UPDATE_TYPE:
+		wcout << L"[!] The type of update is invalid" << endl;
+		return -1;
+	case WU_E_URL_TOO_LONG:
+		wcout << L"[!] The URL exceeded the maximum length" << endl;
+		return -1;
+	case WU_E_UNINSTALL_NOT_ALLOWED:
+		wcout << L"[!] The update could not be uninstalled because the request did not originate from a Windows Server Update Services (WSUS) server" << endl;
+		return -1;
+	case  WU_E_INVALID_PRODUCT_LICENSE:
+		wcout << L"[!] Search may have missed some updates before there is an unlicensed application on the system" << endl;
+		return -1;
+	case WU_E_MISSING_HANDLER:
+		wcout << L"[!] A component required to detect applicable updates was missing" << endl;
+		return -1;
+	case WU_E_LEGACYSERVER:
+		wcout << L"[!] An operation did not complete because it requires a newer version of server" << endl;
+		return -1;
+	case WU_E_BIN_SOURCE_ABSENT:
+		wcout << L"[!] A delta-compressed update could not be installed because it required the source" << endl;
+		return -1;
+	case WU_E_SOURCE_ABSENT:
+		wcout << L"[!] A full-file update could not be installed because it required the source" << endl;
+		return -1;
+	case WU_E_WU_DISABLED:
+		wcout << L"[!] Access to an unmanaged server is not allowed" << endl;
+		return -1;
+	case WU_E_CALL_CANCELLED_BY_POLICY:
+		wcout << L"[!] Operation did not complete because the DisableWindowsUpdateAccess policy was set in the registry" << endl;
+		return -1;
+	case WU_E_INVALID_PROXY_SERVER:
+		wcout << L"[!] The format of the proxy list was invalid" << endl;
+		return -1;
+	case WU_E_INVALID_FILE:
+		wcout << L"[!] The file is in the wrong format" << endl;
+		return -1;
+	case WU_E_INVALID_CRITERIA:
+		wcout << L"[!] The search criteria string was invalid" << endl;
+		return -1;
+	case WU_E_EULA_UNAVAILABLE:
+		wcout << L"[!] License terms could not be downloaded" << endl;
+		return -1;
+	case WU_E_DOWNLOAD_FAILED:
+		wcout << L"[!] Update failed to download" << endl;
+		return -1;
+	case WU_E_UPDATE_NOT_PROCESSED:
+		wcout << L"[!] The update was not processed" << endl;
+		return -1;
+	case WU_E_INVALID_OPERATION:
+		wcout << L"[!] The object's current state did not allow the operation" << endl;
+		return -1;
+	case WU_E_NOT_SUPPORTED:
+		wcout << L"[!] The functionality for the operation is not supported" << endl;
+		return -1;
+	case WU_E_TOO_MANY_RESYNC:
+		wcout << L"[!] Agent is asked by server to resync too many times" << endl;
+		return -1;
+	case WU_E_NO_SERVER_CORE_SUPPORT:
+		wcout << L"[!] The WUA API method does not run on the server core installation" << endl;
+		return -1;
+	case WU_E_SYSPREP_IN_PROGRESS:
+		wcout << L"[!] Service is not available while sysprep is running" << endl;
+		return -1;
+	case WU_E_UNKNOWN_SERVICE:
+		wcout << L"[!] The update service is no longer registered with automatic updates" << endl;
+		return -1;
+	case WU_E_NO_UI_SUPPORT:
+		wcout << L"[!] No support for the WUA user interface" << endl;
+		return -1;
+	case WU_E_PER_MACHINE_UPDATE_ACCESS_DENIED:
+		wcout << L"[!] Only administrators can perform this operation on per-computer updates" << endl;
+		return -1;
+	case WU_E_UNSUPPORTED_SEARCHSCOPE:
+		wcout << L"[!] A search was attempted with a scope that is not currently supported for this type of search" << endl;
+		return -1;
+	case WU_E_BAD_FILE_URL:
+		wcout << L"[!] The URL does not point to a file" << endl;
+		return -1;
+	//case WU_E_NOTSUPPORTED:
+	//	wcout << L"[!] The operation requested is not supported" << endl;
+	//	return -1;
+	case WU_E_INVALID_NOTIFICATION_INFO:
+		wcout << L"[!] The featured update notification info returned by the server is invalid" << endl;
+		return -1;
+	case WU_E_OUTOFRANGE:
+		wcout << L"[!] The data is out of range" << endl;
+		return -1;
+	case WU_E_SETUP_IN_PROGRESS:
+		wcout << L"[!] WUA operations are not available while operating system setup is running" << endl;
+		return -1;
+	case WU_E_UNEXPECTED:
+		wcout << L"[!] An operation failed due to reasons not covered by another error code" << endl;
+		return -1;
+	default:
+		wcout << "[!] Some error" << endl;
+		return -1;
+	}
+
+	return 0;
 }
