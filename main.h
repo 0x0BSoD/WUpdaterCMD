@@ -25,5 +25,7 @@ struct Updates {
 // Functions and methods
 void printUInfo(Updates upd, IUpdateCollection* ToDownloadList);
 void syncDownloadUpdates(Updates upd, IUpdateCollection* ToDownloadList, IUpdateDownloader* iDownloader);
+void installUpdates(Updates updates, IUpdateCollection* list);
+
 BSTR getCriteria();
 int checkHR(HRESULT hr);
