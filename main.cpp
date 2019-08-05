@@ -5,6 +5,9 @@
 #include <ATLComTime.h>
 #include <wuerror.h>
 #include "main.h"
+#include <signal.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 using namespace std;
 
@@ -15,12 +18,16 @@ int main(int argc, _TCHAR* argv[])
 	HRESULT hr;
 	BSTR criteria;
 	hr = CoInitialize(NULL);
-	
+	int rc;
+
 	// Download
 	IUpdateDownloader* iDownloader;
 	IUpdateCollection* ToDownloadList;
-
 	hr = CoCreateInstance(CLSID_UpdateCollection, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateCollection, (LPVOID*)& ToDownloadList);
+
+	signal(SIGINT, signalHandler);
+
+
 	// ==========================================================================
 	// SEARCH SECTION
 	// ==========================================================================
@@ -38,8 +45,10 @@ int main(int argc, _TCHAR* argv[])
 		updates.UpdatesList->get_Count(&updates.Size);
 
 		// Print updates info
-		printUInfo(updates, ToDownloadList);
-
+		rc = printUInfo(updates, ToDownloadList);
+		if (rc != 0) {
+			return -1;
+		}
 		// ==========================================================================
 		// DOWNLOAD SECTION
 		// ==========================================================================
@@ -49,7 +58,7 @@ int main(int argc, _TCHAR* argv[])
 		}
 		// Updates to download
 		syncDownloadUpdates(updates, ToDownloadList, iDownloader);
-		installUpdates(updates, ToDownloadList);
+		installUpdates(updates);
 	}
 	else 
 	{
@@ -96,13 +105,13 @@ BSTR getCriteria() {
 // ==========================================================================
 
 // Print info about founded updates
-void printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
+int printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 	 HRESULT hr = CoInitialize(NULL);
 
 	if (upd.Size == 0)
 	{
 		wcout << L"[!] No updates found" << endl;
-		return;
+		return -1;
 	}
 
 	for (LONG i = 0; i < upd.Size; i++)
@@ -128,18 +137,19 @@ void printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 				{
 				case E_POINTER:
 					wcout << L"[!] A parameter value is invalid or NULL" << endl;
-					return;
+					return -1;
 				case WU_E_NOT_SUPPORTED:
 					wcout << L"[!] The collection is read-only" << endl;
-					return;
+					return -1;
 				}
 			}
 			break;
 		default:
-			wcout << "[!] Som error" << endl;
-			return;
+			wcout << "[!] Some error" << endl;
+			return -1;
 		}
 	}
+	return 0;
 };
 
 
@@ -188,7 +198,7 @@ void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUp
 // ==========================================================================
 // INSTALL SECTION
 // ==========================================================================
-void installUpdates(Updates updates, IUpdateCollection* list) {
+void installUpdates(Updates updates) {
 	HRESULT hr = CoInitialize(NULL);
 	IUpdateInstaller* iUInstaller;
 	IInstallationResult* iIResult;
@@ -200,29 +210,47 @@ void installUpdates(Updates updates, IUpdateCollection* list) {
 	{
 		return;
 	}
-	iUInstaller->put_Updates(list);
+	iUInstaller->put_Updates(updates.UpdatesList);
 
 	wcout << "Installation ..." << endl;
 	hr = iUInstaller->Install(&iIResult);
 
-	list->get_Count(&lenght);
+	updates.UpdatesList->get_Count(&lenght);
 	if (checkHR(hr) == 0)
 	{
 		wcout << L"List of downloaded items on the machine:" << endl;
 		for (LONG i = 0; i < lenght; i++)
 		{
-			list->get_Item(i, &updates.Item);
+			updates.UpdatesList->get_Item(i, &updates.Item);
 			updates.Item->get_Title(&updates.Name);
 			iIResult->GetUpdateResult(i, &iUIResult);
 			hr = iUIResult->get_ResultCode(&updates.RC);
 			switch (updates.RC)
 			{
+			case 0:
+				wcout << i + 1 << " - " << updates.Name << " The operation is not started" << endl;
+				break;
+			case 1:
+				wcout << i + 1 << " - " << updates.Name << " The operation is in progress" << endl;
+				break;
 			case 2:
 				wcout << i + 1 << " - " << updates.Name << " Successfully installed" << endl;
+				break;
+			case 3:
+				wcout << i + 1 << " - " << updates.Name << " The operation is complete, but one or more errors occurred during the operation. The results might be incomplete" << endl;
+				break;
+			case 4:
+				wcout << i + 1 << " - " << updates.Name << " The operation failed to complete" << endl;
+				break;
+			case 5:
+				wcout << i + 1 << " - " << updates.Name << " The operation is canceled" << endl;
 				break;
 			default:
 				wcout << i + 1 << " - " << updates.Name << " RESULT: " << updates.RC << endl;
 				break;
+			}
+			if (updates.RC != 2) {
+				checkHR(hr);
 			}
 		}
 	}
@@ -230,6 +258,19 @@ void installUpdates(Updates updates, IUpdateCollection* list) {
 	{
 		return;
 	}
+}
+
+
+void signalHandler(int s) {
+	if (s == 2) {
+		printf("Caught interrupt\n");
+	}
+	else {
+		printf("Caught signal %d\n", s);
+	}
+	
+	exit(1);
+
 }
 
 // ==========================================================================
