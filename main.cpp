@@ -15,26 +15,26 @@ using namespace std;
 int main(int argc, char* argv[])
 {
 
-
-
 	Search  sr;
 	Updates updates;
 	HRESULT hr;
+	hr = CoInitialize(NULL);
 	BSTR criteria;
 	ArgParameters p;
-	hr = CoInitialize(NULL);
 	int rc;
 
+	// Parse arguments
 	rc = parseArgs(argc, argv, &p);
 	if (rc != 0) {
 		return -1;
 	}
 
-	// Download
+	// Download vars
 	IUpdateDownloader* iDownloader;
 	IUpdateCollection* ToDownloadList;
 	hr = CoCreateInstance(CLSID_UpdateCollection, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateCollection, (LPVOID*)& ToDownloadList);
 
+	// Register signal handler
 	signal(SIGINT, signalHandler);
 
 
@@ -45,7 +45,6 @@ int main(int argc, char* argv[])
 	if (criteria == L"NULL") {
 		return -1;
 	}
-
 
 	hr = CoCreateInstance(CLSID_UpdateSession, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateSession, (LPVOID*)& sr.iUpdate);
 	hr = sr.iUpdate->CreateUpdateSearcher(&sr.searcher);
