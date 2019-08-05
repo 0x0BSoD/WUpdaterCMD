@@ -11,6 +11,6 @@ Tested on Windows Server 2016
 Usage: WUpdateCMD.exe <option>
 Options:
         -h,--help               Show this help message
-        -c,--criteria CRITERIA  Specify the path with search criteria
+        -c,--criteria CRITERIA  Specify the path to file with search criteria
 i.e. IsInstalled=0 and Type='Software' and IsHidden=0
 ```
