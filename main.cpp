@@ -8,17 +8,27 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <vector>
 
 using namespace std;
 
-int main(int argc, _TCHAR* argv[])
+int main(int argc, char* argv[])
 {
+
+
+
 	Search  sr;
 	Updates updates;
 	HRESULT hr;
 	BSTR criteria;
+	ArgParameters p;
 	hr = CoInitialize(NULL);
 	int rc;
+
+	rc = parseArgs(argc, argv, &p);
+	if (rc != 0) {
+		return -1;
+	}
 
 	// Download
 	IUpdateDownloader* iDownloader;
@@ -31,7 +41,12 @@ int main(int argc, _TCHAR* argv[])
 	// ==========================================================================
 	// SEARCH SECTION
 	// ==========================================================================
-	criteria = getCriteria();
+	criteria = getCriteria(p.CriteriaFP);
+	if (criteria == L"NULL") {
+		return -1;
+	}
+
+
 	hr = CoCreateInstance(CLSID_UpdateSession, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateSession, (LPVOID*)& sr.iUpdate);
 	hr = sr.iUpdate->CreateUpdateSearcher(&sr.searcher);
 	wcout << endl;
@@ -72,10 +87,59 @@ int main(int argc, _TCHAR* argv[])
 // Other
 // ==========================================================================
 
+// Handle signals, for future usage
+static void signalHandler(int s) {
+	if (s == 2) {
+		printf("Caught interrupt\n");
+	}
+	else {
+		printf("Caught signal %d\n", s);
+	}
+	exit(1);
+}
+
+// Show help
+static void showUsage(char* name)
+{
+	cerr << "Usage: " << name << " <option>"
+		<< "Options:\n"
+		<< "\t-h,--help\t\tShow this help message\n"
+		<< "\t-c,--criteria CRITERIA\tSpecify the path with search criteria\n"
+		<< "i.e. IsInstalled=0 and Type='Software' and IsHidden=0"
+		<< endl;
+}
+
+// Arg parser
+static int parseArgs(int argc, char* argv[], ArgParameters* params) {
+	if (argc < 2) {
+		showUsage(argv[0]);
+		return -1;
+	}
+
+	for (int i = 1; i < argc; ++i) {
+		string arg = argv[i];
+		if ((arg == "-h") || (arg == "--help")) {
+			showUsage(argv[0]);
+			return -1;
+		}
+		else if ((arg == "-c") || (arg == "--criteria")) {
+			if (i + 1 < argc) {
+				i++;
+				params->CriteriaFP = argv[i];
+			}
+			else {
+				cerr << "--criteria option requires one argument." << endl;
+				return -1;
+			}
+		}
+	}
+	return 0;
+}
+
 // Get search criteria from file
-BSTR getCriteria() {
+static BSTR getCriteria(string path) {
 	string str_param;
-	ifstream param("search_param.txt");
+	ifstream param(path);
 
 	if (param.is_open())
 	{
@@ -88,7 +152,8 @@ BSTR getCriteria() {
 	}
 	else
 	{
-		wcout << "Unable to open file search_param.txt" << endl;
+		wcout << "Unable to open file ";
+		cout << path << endl;
 		return L"NULL";
 	}
 
@@ -258,19 +323,6 @@ void installUpdates(Updates updates) {
 	{
 		return;
 	}
-}
-
-
-void signalHandler(int s) {
-	if (s == 2) {
-		printf("Caught interrupt\n");
-	}
-	else {
-		printf("Caught signal %d\n", s);
-	}
-	
-	exit(1);
-
 }
 
 // ==========================================================================
