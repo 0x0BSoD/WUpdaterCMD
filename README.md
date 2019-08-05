@@ -5,7 +5,7 @@ Weekend Project.
 
 Builded in Visual Studio 2019
 
-Tested on Windows Server 2016
+Tested on Windows Server 2016 and Windows 10
 
 ```cmd
 Usage: WUpdateCMD.exe <option>
