@@ -22,11 +22,17 @@ struct Updates {
 	OperationResultCode RC;
 };
 
+// Parameters
+struct ArgParameters {
+	std::string CriteriaFP;
+};
+
 // Functions and methods
 int printUInfo(Updates upd, IUpdateCollection* ToDownloadList);
 void syncDownloadUpdates(Updates upd, IUpdateCollection* ToDownloadList, IUpdateDownloader* iDownloader);
 void installUpdates(Updates updates);
-void signalHandler(int s);
-
-BSTR getCriteria();
+static void signalHandler(int s);
+static void showUsage(char* name);
+static int parseArgs(int argc, char* argv[], ArgParameters* params);
+static BSTR getCriteria(std::string path);
 int checkHR(HRESULT hr);
