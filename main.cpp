@@ -101,10 +101,10 @@ static void signalHandler(int s) {
 // Show help
 static void showUsage(char* name)
 {
-	cerr << "Usage: " << name << " <option>"
+	cerr << "Usage: " << name << " <option>\n"
 		<< "Options:\n"
 		<< "\t-h,--help\t\tShow this help message\n"
-		<< "\t-c,--criteria CRITERIA\tSpecify the path with search criteria\n"
+		<< "\t-c,--criteria CRITERIA\tSpecify the path to file with search criteria\n"
 		<< "i.e. IsInstalled=0 and Type='Software' and IsHidden=0"
 		<< endl;
 }
