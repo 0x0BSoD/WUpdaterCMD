@@ -6,3 +6,11 @@ Weekend Project.
 Builded in Visual Studio 2019
 
 Tested on Windows Server 2016
+
+```cmd
+Usage: WUpdateCMD.exe <option>
+Options:
+        -h,--help               Show this help message
+        -c,--criteria CRITERIA  Specify the path with search criteria
+i.e. IsInstalled=0 and Type='Software' and IsHidden=0
+```
