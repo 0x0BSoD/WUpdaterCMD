@@ -127,7 +127,7 @@ static void showUsage(char* name)
 		<< "Options:\n"
 		<< "\t-h,--help\t\tShow this help message\n"
 		<< "\t-q,--quiet\t\tRun not asking  agreement\n"
-		<< "\t-c,--criteria CRITERIA\tSpecify the path to file with search criteria\n"
+		<< "\t-c,--criteria PATH\tSpecify the path to file with search criteria\n"
 		<< "i.e. IsInstalled=0 and Type='Software' and IsHidden=0"
 		<< endl;
 }
