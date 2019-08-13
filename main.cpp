@@ -22,12 +22,15 @@ int main(int argc, char* argv[])
 	BSTR criteria;
 	ArgParameters p;
 	int rc;
+	char input;
 
 	// Parse arguments
 	rc = parseArgs(argc, argv, &p);
-	if (rc != 0) {
+	if (rc != 0)
+	{
 		return -1;
 	}
+
 
 	// Download vars
 	IUpdateDownloader* iDownloader;
@@ -42,7 +45,8 @@ int main(int argc, char* argv[])
 	// SEARCH SECTION
 	// ==========================================================================
 	criteria = getCriteria(p.CriteriaFP);
-	if (criteria == L"NULL") {
+	if (criteria == L"NULL") 
+	{
 		return -1;
 	}
 
@@ -51,7 +55,7 @@ int main(int argc, char* argv[])
 	wcout << endl;
 	wcout << L"Searching for updates ..." << endl;
 	hr = sr.searcher->Search(criteria, &sr.results);
-	if (checkHR(hr) == 0) 
+	if (checkHR(hr) == 0)
 	{
 		wcout << L"List of applicable items on the machine:" << endl;
 		SysFreeString(criteria);
@@ -60,21 +64,38 @@ int main(int argc, char* argv[])
 
 		// Print updates info
 		rc = printUInfo(updates, ToDownloadList);
-		if (rc != 0) {
+		if (rc != 0) 
+		{
 			return -1;
 		}
-		// ==========================================================================
-		// DOWNLOAD SECTION
-		// ==========================================================================
+
 		hr = sr.iUpdate->CreateUpdateDownloader(&iDownloader);
-		if (checkHR(hr) != 0) {
+		if (checkHR(hr) != 0) 
+		{
 			return -1;
 		}
+
 		// Updates to download
+		if (!p.QuietMode) {
+			cout << "Download? [y/n]";
+			cin >> input;
+			if (input != 'y') {
+				return 0;
+			}
+		}
 		syncDownloadUpdates(updates, ToDownloadList, iDownloader);
+		
+		// Updates to install
+		if(!p.QuietMode) {
+			cout << "Install? [y/n]";
+			cin >> input;
+			if (input != 'y') {
+				return 0;
+			}
+		}
 		installUpdates(updates);
 	}
-	else 
+	else
 	{
 		return -1;
 	}
@@ -88,10 +109,12 @@ int main(int argc, char* argv[])
 
 // Handle signals, for future usage
 static void signalHandler(int s) {
-	if (s == 2) {
+	if (s == 2)
+	{
 		printf("Caught interrupt\n");
 	}
-	else {
+	else 
+	{
 		printf("Caught signal %d\n", s);
 	}
 	exit(1);
@@ -103,6 +126,7 @@ static void showUsage(char* name)
 	cerr << "Usage: " << name << " <option>\n"
 		<< "Options:\n"
 		<< "\t-h,--help\t\tShow this help message\n"
+		<< "\t-q,--quiet\t\tRun not asking  agreement\n"
 		<< "\t-c,--criteria CRITERIA\tSpecify the path to file with search criteria\n"
 		<< "i.e. IsInstalled=0 and Type='Software' and IsHidden=0"
 		<< endl;
@@ -110,19 +134,24 @@ static void showUsage(char* name)
 
 // Arg parser
 static int parseArgs(int argc, char* argv[], ArgParameters* params) {
-	if (argc < 2) {
+	if (argc < 2) 
+	{
 		showUsage(argv[0]);
 		return -1;
 	}
 
-	for (int i = 1; i < argc; ++i) {
+	for (int i = 1; i < argc; ++i) 
+	{
 		string arg = argv[i];
-		if ((arg == "-h") || (arg == "--help")) {
+		if ((arg == "-h") || (arg == "--help")) 
+		{
 			showUsage(argv[0]);
 			return -1;
 		}
-		else if ((arg == "-c") || (arg == "--criteria")) {
-			if (i + 1 < argc) {
+		else if ((arg == "-c") || (arg == "--criteria")) 
+		{
+			if (i + 1 < argc) 
+			{
 				i++;
 				params->CriteriaFP = argv[i];
 			}
@@ -130,6 +159,10 @@ static int parseArgs(int argc, char* argv[], ArgParameters* params) {
 				cerr << "--criteria option requires one argument." << endl;
 				return -1;
 			}
+		}
+		else if ((arg == "-q") || (arg == "--quiet"))
+		{
+			params->QuietMode = true;
 		}
 	}
 	return 0;
@@ -170,7 +203,7 @@ static BSTR getCriteria(string path) {
 
 // Print info about founded updates
 int printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
-	 HRESULT hr = CoInitialize(NULL);
+	HRESULT hr = CoInitialize(NULL);
 
 	if (upd.Size == 0)
 	{
@@ -186,7 +219,7 @@ int printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 		upd.Item->get_LastDeploymentChangeTime(&upd.retdate);
 		COleDateTime odt;
 		odt.m_dt = upd.retdate;
-	
+
 		hr = upd.Item->get_IsDownloaded(&upd.InCache);
 		switch (hr)
 		{
@@ -227,13 +260,15 @@ void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUp
 	HRESULT hr = CoInitialize(NULL);
 
 	ToDownloadList->get_Count(&tdLen);
-	if (tdLen > 0) {
+	if (tdLen > 0) 
+	{
 		iDownloader->put_Updates(ToDownloadList);
-		
+
 		wcout << endl;
 		wcout << L"Downloading updates ..." << endl;
 		hr = iDownloader->Download(&IDResult);
-		if (checkHR(hr) == 0) {
+		if (checkHR(hr) == 0) 
+		{
 			wcout << L"List of downloaded items on the machine:" << endl;
 			for (LONG i = 0; i < tdLen; i++)
 			{
@@ -252,7 +287,7 @@ void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUp
 				}
 			}
 		}
-		else 
+		else
 		{
 			return;
 		}
@@ -276,6 +311,7 @@ void installUpdates(Updates updates) {
 	}
 	iUInstaller->put_Updates(updates.UpdatesList);
 
+	wcout << endl;
 	wcout << "Installation ..." << endl;
 	hr = iUInstaller->Install(&iIResult);
 
@@ -313,12 +349,13 @@ void installUpdates(Updates updates) {
 				wcout << i + 1 << " - " << updates.Name << " RESULT: " << updates.RC << endl;
 				break;
 			}
-			if (updates.RC != 2) {
+			if (updates.RC != 2) 
+			{
 				checkHR(hr);
 			}
 		}
 	}
-	else 
+	else
 	{
 		return;
 	}
@@ -517,9 +554,9 @@ int checkHR(HRESULT hr) {
 	case WU_E_BAD_FILE_URL:
 		wcout << L"[!] The URL does not point to a file" << endl;
 		return -1;
-	//case WU_E_NOTSUPPORTED:
-	//	wcout << L"[!] The operation requested is not supported" << endl;
-	//	return -1;
+		//case WU_E_NOTSUPPORTED:
+		//	wcout << L"[!] The operation requested is not supported" << endl;
+		//	return -1;
 	case WU_E_INVALID_NOTIFICATION_INFO:
 		wcout << L"[!] The featured update notification info returned by the server is invalid" << endl;
 		return -1;
