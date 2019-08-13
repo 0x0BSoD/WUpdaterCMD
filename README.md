@@ -11,6 +11,7 @@ Tested on Windows Server 2016 and Windows 10
 Usage: WUpdateCMD.exe <option>
 Options:
         -h,--help               Show this help message
+        -q,--quiet              Run not asking  agreement
         -c,--criteria CRITERIA  Specify the path to file with search criteria
 i.e. IsInstalled=0 and Type='Software' and IsHidden=0
 ```
