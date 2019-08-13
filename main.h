@@ -25,6 +25,7 @@ struct Updates {
 // Parameters
 struct ArgParameters {
 	std::string CriteriaFP;
+	bool QuietMode = false;
 };
 
 // Functions and methods
