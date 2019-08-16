@@ -57,7 +57,6 @@ int main(int argc, char* argv[])
 	hr = sr.searcher->Search(criteria, &sr.results);
 	if (checkHR(hr) == 0)
 	{
-		wcout << L"List of applicable items on the machine:" << endl;
 		SysFreeString(criteria);
 		sr.results->get_Updates(&updates.UpdatesList);
 		updates.UpdatesList->get_Count(&updates.Size);
@@ -76,20 +75,24 @@ int main(int argc, char* argv[])
 		}
 
 		// Updates to download
-		if (!p.QuietMode) {
+		if (!p.QuietMode) 
+		{
 			cout << "Download? [y/n]";
 			cin >> input;
-			if (input != 'y') {
+			if (input != 'y') 
+			{
 				return 0;
 			}
 		}
 		syncDownloadUpdates(updates, ToDownloadList, iDownloader);
 		
 		// Updates to install
-		if(!p.QuietMode) {
+		if(!p.QuietMode) 
+		{
 			cout << "Install? [y/n]";
 			cin >> input;
-			if (input != 'y') {
+			if (input != 'y') 
+			{
 				return 0;
 			}
 		}
@@ -211,6 +214,7 @@ int printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 		return -1;
 	}
 
+	wcout << L"List of applicable items on the machine:" << endl;
 	for (LONG i = 0; i < upd.Size; i++)
 	{
 		long newIndex;
@@ -221,13 +225,15 @@ int printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 		odt.m_dt = upd.retdate;
 
 		hr = upd.Item->get_IsDownloaded(&upd.InCache);
-		switch (hr)
+
+		if (checkHR(hr) == 0) 
 		{
-		case S_OK:
-			if (upd.InCache) {
+			if (upd.InCache)
+			{
 				wcout << i + 1 << " - " << upd.Name << "  Release Date " << (LPCTSTR)odt.Format(_T("%A, %B %d, %Y")) << " || Already downloaded" << endl;
 			}
-			else {
+			else 
+			{
 				hr = ToDownloadList->Add(upd.Item, &newIndex);
 				wcout << i + 1 << " - " << upd.Name << "  Release Date " << (LPCTSTR)odt.Format(_T("%A, %B %d, %Y")) << " || To download" << endl;
 				switch (hr)
@@ -240,9 +246,8 @@ int printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 					return -1;
 				}
 			}
-			break;
-		default:
-			wcout << "[!] Some error" << endl;
+		}
+		else {
 			return -1;
 		}
 	}
