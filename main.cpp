@@ -1,14 +1,19 @@
+#define _CRT_SECURE_NO_WARNINGS
+#define _WIN32_DCOM
+
 #include <wuapi.h>
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <ATLComTime.h>
 #include <wuerror.h>
-#include "main.h"
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <vector>
+#include <comutil.h>
+
+#include "main.h"
 
 using namespace std;
 
@@ -45,13 +50,14 @@ int main(int argc, char* argv[])
 	// SEARCH SECTION
 	// ==========================================================================
 	criteria = getCriteria(p.CriteriaFP);
-	if (criteria == L"NULL") 
+	if (criteria == L"NULL")
 	{
 		return -1;
 	}
 
 	hr = CoCreateInstance(CLSID_UpdateSession, NULL, CLSCTX_INPROC_SERVER, IID_IUpdateSession, (LPVOID*)& sr.iUpdate);
 	hr = sr.iUpdate->CreateUpdateSearcher(&sr.searcher);
+
 	wcout << endl;
 	wcout << L"Searching for updates ..." << endl;
 	hr = sr.searcher->Search(criteria, &sr.results);
@@ -63,35 +69,37 @@ int main(int argc, char* argv[])
 
 		// Print updates info
 		rc = printUInfo(updates, ToDownloadList);
-		if (rc != 0) 
+		if (rc != 0)
 		{
 			return -1;
 		}
 
 		hr = sr.iUpdate->CreateUpdateDownloader(&iDownloader);
-		if (checkHR(hr) != 0) 
+		if (checkHR(hr) != 0)
 		{
 			return -1;
 		}
 
 		// Updates to download
-		if (!p.QuietMode) 
+		if (!p.QuietMode && updates.Size > 0)
 		{
 			cout << "Download? [y/n]";
 			cin >> input;
-			if (input != 'y') 
+			if (input != 'y')
 			{
 				return 0;
 			}
 		}
-		syncDownloadUpdates(updates, ToDownloadList, iDownloader);
 		
+		syncDownloadUpdates(updates, ToDownloadList, iDownloader);
+		//asyncDownloadUpdates(updates, ToDownloadList, iDownloader);
+
 		// Updates to install
-		if(!p.QuietMode) 
+		if (!p.QuietMode)
 		{
 			cout << "Install? [y/n]";
 			cin >> input;
-			if (input != 'y') 
+			if (input != 'y')
 			{
 				return 0;
 			}
@@ -110,13 +118,107 @@ int main(int argc, char* argv[])
 // Other
 // ==========================================================================
 
+static void UpdateProgressCBDefault(UINT phase, UINT progress, void* pContext)
+{
+	switch (phase)
+	{
+	case PROGRESS_BEGIN:
+		wcout << L"Progress Begin " << progress << endl;
+		break;
+	case PROGRESS_SEARCHING:
+		wcout << L"Progress Searching " << progress << endl;
+		break;
+	case PROGRESS_DOWNLOADING:
+		wcout << L"Progress Downloading " << progress << endl;
+		break;
+	case PROGRESS_INSTALLING:
+		wcout << L"Progress Installing " << progress << endl;
+		break;
+	case PROGRESS_END:
+		wcout << L"Progress End " << progress << endl;
+		break;
+	default:
+		wcout << L"Progress Unknown " << phase << endl;
+		break;
+	}
+}
+
+template <class I> class IUNK : public I
+{
+public:
+	IUNK(UPDATEPROGRESSCB pfnProgress, void* pContext) :
+		_pfnProgress(pfnProgress), _pContext(pContext) {}
+
+	STDMETHODIMP QueryInterface(REFIID riid, void __RPC_FAR* __RPC_FAR* ppvObject)
+	{
+		if (ppvObject == NULL)
+			return E_POINTER;
+
+		if (riid == __uuidof(IUnknown) || riid == __uuidof(I))
+		{
+			*ppvObject = this;
+			return S_OK;
+		}
+
+		return E_NOINTERFACE;
+	}
+	STDMETHODIMP_(ULONG) AddRef(void) { return 1; }
+	STDMETHODIMP_(ULONG) Release(void) { return 1; }
+
+	UPDATEPROGRESSCB   _pfnProgress;
+	void* _pContext;
+};
+
+class IDPC : public IUNK<IDownloadProgressChangedCallback> {
+public:
+	IDPC(UPDATEPROGRESSCB pfnProgress, void* pContext) :
+		IUNK<IDownloadProgressChangedCallback>(pfnProgress, pContext) {}
+
+	STDMETHODIMP Invoke(IDownloadJob* job, IDownloadProgressChangedCallbackArgs* args)
+	{
+		IDownloadProgress* prg = NULL;
+		long percent = 0;
+		HRESULT hr = args->get_Progress(&prg);
+
+		prg->get_PercentComplete(&percent);
+		_pfnProgress(PROGRESS_DOWNLOADING, percent, _pContext);
+		prg->Release();
+
+		return hr;
+	}
+};
+
+class IDCC : public IUNK<IDownloadCompletedCallback> {
+public:
+	IDCC(UPDATEPROGRESSCB pfnProgress, void* pContext) :
+		IUNK<IDownloadCompletedCallback>(pfnProgress, pContext)
+		{
+			_Event = CreateEvent(NULL, FALSE, FALSE, NULL);
+		}
+
+	~IDCC()
+	{
+		CloseHandle(_Event);
+	}
+
+	STDMETHODIMP Invoke(IDownloadJob* job, IDownloadCompletedCallbackArgs* args)
+	{
+		_pfnProgress(PROGRESS_DOWNLOADING, 100, _pContext);
+		SetEvent(_Event);
+		return S_OK;
+	}
+
+	HANDLE _Event;
+};
+
+
 // Handle signals, for future usage
 static void signalHandler(int s) {
 	if (s == 2)
 	{
 		printf("Caught interrupt\n");
 	}
-	else 
+	else
 	{
 		printf("Caught signal %d\n", s);
 	}
@@ -137,23 +239,23 @@ static void showUsage(char* name)
 
 // Arg parser
 static int parseArgs(int argc, char* argv[], ArgParameters* params) {
-	if (argc < 2) 
+	if (argc < 2)
 	{
 		showUsage(argv[0]);
 		return -1;
 	}
 
-	for (int i = 1; i < argc; ++i) 
+	for (int i = 1; i < argc; ++i)
 	{
 		string arg = argv[i];
-		if ((arg == "-h") || (arg == "--help")) 
+		if ((arg == "-h") || (arg == "--help"))
 		{
 			showUsage(argv[0]);
 			return -1;
 		}
-		else if ((arg == "-c") || (arg == "--criteria")) 
+		else if ((arg == "-c") || (arg == "--criteria"))
 		{
-			if (i + 1 < argc) 
+			if (i + 1 < argc)
 			{
 				i++;
 				params->CriteriaFP = argv[i];
@@ -226,13 +328,13 @@ int printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 
 		hr = upd.Item->get_IsDownloaded(&upd.InCache);
 
-		if (checkHR(hr) == 0) 
+		if (checkHR(hr) == 0)
 		{
 			if (upd.InCache)
 			{
 				wcout << i + 1 << " - " << upd.Name << "  Release Date " << (LPCTSTR)odt.Format(_T("%A, %B %d, %Y")) << " || Already downloaded" << endl;
 			}
-			else 
+			else
 			{
 				hr = ToDownloadList->Add(upd.Item, &newIndex);
 				wcout << i + 1 << " - " << upd.Name << "  Release Date " << (LPCTSTR)odt.Format(_T("%A, %B %d, %Y")) << " || To download" << endl;
@@ -258,38 +360,132 @@ int printUInfo(Updates upd, IUpdateCollection* ToDownloadList) {
 // ==========================================================================
 // DOWNLOAD SECTION
 // ==========================================================================
-void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUpdateDownloader* iDownloader) {
+void asyncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUpdateDownloader* iDownloader)
+{
+	void* pContext = NULL;
+	UPDATEPROGRESSCB pfnProgress = UpdateProgressCBDefault;
+	long tdLen;
+	IDownloadResult* IDResult;
+	HRESULT hr = CoInitialize(NULL);
+	ToDownloadList->get_Count(&tdLen);
+
+	if (tdLen > 0)
+	{
+		pfnProgress(PROGRESS_BEGIN, 0, pContext);
+		hr = iDownloader->put_Updates(ToDownloadList);
+		if (checkHR(hr) == 0)
+		{
+			IUpdateDownloadResult* IUDResult;
+			IDownloadJob* pJob = NULL;
+			VARIANT pVar = { 0 };
+			IDPC progressCB(pfnProgress, pContext);
+			IDCC completeCB(pfnProgress, pContext);
+			hr = iDownloader->BeginDownload(&progressCB, &completeCB, pVar, &pJob);
+			if (checkHR(hr) == 0) {
+				
+				pfnProgress(PROGRESS_DOWNLOADING, 0, pContext);
+				WaitForSingleObject(completeCB._Event, INFINITE);
+				hr = iDownloader->EndDownload(pJob, &IDResult);
+				pJob->Release();
+				
+				wcout << L"List of downloaded items on the machine:" << endl;
+				for (LONG i = 0; i < tdLen; i++)
+				{
+					ToDownloadList->get_Item(i, &updates.Item);
+					updates.Item->get_Title(&updates.Name);
+					IDResult->GetUpdateResult(i, &IUDResult);
+					hr = IUDResult->get_ResultCode(&updates.RC);
+					switch (updates.RC)
+					{
+					case 0:
+						wcout << i + 1 << " - " << updates.Name << " The operation is not started" << endl;
+						break;
+					case 1:
+						wcout << i + 1 << " - " << updates.Name << " The operation is in progress" << endl;
+						break;
+					case 2:
+						wcout << i + 1 << " - " << updates.Name << " Successfully downloaded" << endl;
+						break;
+					case 3:
+						wcout << i + 1 << " - " << updates.Name << " The operation is complete, but one or more errors occurred during the operation. The results might be incomplete" << endl;
+						break;
+					case 4:
+						wcout << i + 1 << " - " << updates.Name << " The operation failed to complete" << endl;
+						break;
+					case 5:
+						wcout << i + 1 << " - " << updates.Name << " The operation is canceled" << endl;
+						break;
+					default:
+						wcout << i + 1 << " - " << updates.Name << " RESULT: " << updates.RC << endl;
+						break;
+					}
+				}
+			}
+		}
+		else
+		{
+			return;
+		}
+	}
+	pfnProgress(PROGRESS_END, 0, pContext);
+}
+
+
+void syncDownloadUpdates(Updates updates, IUpdateCollection* ToDownloadList, IUpdateDownloader* iDownloader)
+{
 	long tdLen;
 	IUpdateDownloadResult* IUDResult;
 	IDownloadResult* IDResult;
 	HRESULT hr = CoInitialize(NULL);
 
 	ToDownloadList->get_Count(&tdLen);
-	if (tdLen > 0) 
+	if (tdLen > 0)
 	{
-		iDownloader->put_Updates(ToDownloadList);
-
-		wcout << endl;
-		wcout << L"Downloading updates ..." << endl;
-		hr = iDownloader->Download(&IDResult);
-		if (checkHR(hr) == 0) 
+		hr = iDownloader->put_Updates(ToDownloadList);
+		if (checkHR(hr) == 0)
 		{
-			wcout << L"List of downloaded items on the machine:" << endl;
-			for (LONG i = 0; i < tdLen; i++)
+			iDownloader->put_Updates(ToDownloadList);
+			wcout << endl;
+			wcout << L"Downloading updates ..." << endl;
+			hr = iDownloader->Download(&IDResult);
+			if (checkHR(hr) == 0)
 			{
-				ToDownloadList->get_Item(i, &updates.Item);
-				updates.Item->get_Title(&updates.Name);
-				IDResult->GetUpdateResult(i, &IUDResult);
-				hr = IUDResult->get_ResultCode(&updates.RC);
-				switch (updates.RC)
+				wcout << L"List of downloaded items on the machine:" << endl;
+				for (LONG i = 0; i < tdLen; i++)
 				{
-				case 2:
-					wcout << i + 1 << " - " << updates.Name << " Successfully downloaded" << endl;
-					break;
-				default:
-					wcout << i + 1 << " - " << updates.Name << " RESULT: " << updates.RC << endl;
-					break;
+					ToDownloadList->get_Item(i, &updates.Item);
+					updates.Item->get_Title(&updates.Name);
+					IDResult->GetUpdateResult(i, &IUDResult);
+					hr = IUDResult->get_ResultCode(&updates.RC);
+					switch (updates.RC)
+					{
+					case 0:
+						wcout << i + 1 << " - " << updates.Name << " The operation is not started" << endl;
+						break;
+					case 1:
+						wcout << i + 1 << " - " << updates.Name << " The operation is in progress" << endl;
+						break;
+					case 2:
+						wcout << i + 1 << " - " << updates.Name << " Successfully downloaded" << endl;
+						break;
+					case 3:
+						wcout << i + 1 << " - " << updates.Name << " The operation is complete, but one or more errors occurred during the operation. The results might be incomplete" << endl;
+						break;
+					case 4:
+						wcout << i + 1 << " - " << updates.Name << " The operation failed to complete" << endl;
+						break;
+					case 5:
+						wcout << i + 1 << " - " << updates.Name << " The operation is canceled" << endl;
+						break;
+					default:
+						wcout << i + 1 << " - " << updates.Name << " RESULT: " << updates.RC << endl;
+						break;
+					}
 				}
+			}
+			else
+			{
+				return;
 			}
 		}
 		else
@@ -354,7 +550,7 @@ void installUpdates(Updates updates) {
 				wcout << i + 1 << " - " << updates.Name << " RESULT: " << updates.RC << endl;
 				break;
 			}
-			if (updates.RC != 2) 
+			if (updates.RC != 2)
 			{
 				checkHR(hr);
 			}
@@ -371,6 +567,11 @@ void installUpdates(Updates updates) {
 // ==========================================================================
 
 int checkHR(HRESULT hr) {
+	
+	if (hr != S_OK)
+	{
+		wcout << L"[!] Error code: " << hr << endl;
+	}
 
 	switch (hr)
 	{
@@ -559,9 +760,9 @@ int checkHR(HRESULT hr) {
 	case WU_E_BAD_FILE_URL:
 		wcout << L"[!] The URL does not point to a file" << endl;
 		return -1;
-		//case WU_E_NOTSUPPORTED:
-		//	wcout << L"[!] The operation requested is not supported" << endl;
-		//	return -1;
+	case WU_E_PT_WINHTTP_NAME_NOT_RESOLVED:
+		wcout << L"[!] The proxy server or target server name cannot be resolved" << endl;
+		return -1;
 	case WU_E_INVALID_NOTIFICATION_INFO:
 		wcout << L"[!] The featured update notification info returned by the server is invalid" << endl;
 		return -1;
@@ -574,8 +775,11 @@ int checkHR(HRESULT hr) {
 	case WU_E_UNEXPECTED:
 		wcout << L"[!] An operation failed due to reasons not covered by another error code" << endl;
 		return -1;
+	case CERT_E_EXPIRED:
+		wcout << L"[!] A required certificate is not within its validity period when verifying against the current system clock or the timestamp in the signed file" << endl;
+		return -1;
 	default:
-		wcout << "[!] Some error" << endl;
+		wcout << "[!] No message for this error" << endl;
 		return -1;
 	}
 
