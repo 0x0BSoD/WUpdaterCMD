@@ -10,6 +10,9 @@
 #include <comutil.h>
 #include <comdef.h>
 
+#include "error_messages.h"
+#include "messages.h"
+
 // COM smart pointer types for Windows Update API
 _COM_SMARTPTR_TYPEDEF(IUpdateSession, __uuidof(IUpdateSession));
 _COM_SMARTPTR_TYPEDEF(IUpdateSearcher, __uuidof(IUpdateSearcher));
@@ -83,7 +86,6 @@ namespace WUpdater {
     int parseArguments(int argc, char* argv[], CommandLineArgs& params);
     _bstr_t getCriteriaFromFile(const std::string& filePath);
     int checkHResult(HRESULT hr);
-    std::wstring getErrorMessage(HRESULT hr);
     void signalHandler(int signal);
 
     // Update Manager class
