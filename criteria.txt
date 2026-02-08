@@ -1,0 +1,1 @@
+IsInstalled=0 and Type='Software' and IsHidden=0
